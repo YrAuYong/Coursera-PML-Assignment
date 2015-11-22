@@ -1,0 +1,206 @@
+---
+title: "Coursera Practical Machine Learning Assignment"
+author: "Yuri Au Yong"
+date: "Saturday, November 21, 2015"
+output: html_document
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+## Objective
+In this project, the goal it to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har. 
+
+## Data
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+From the "Weight Lifting Exercise Dataset" section in the source website, six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions:
+
+- exactly according to the specification (Class A)
+- throwing the elbows to the front (Class B)
+- lifting the dumbbell only halfway (Class C)
+- lowering the dumbbell only halfway (Class D)
+- throwing the hips to the front (Class E)
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. 
+
+## Initialization
+
+```{r init}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(corrplot)
+#set options
+opts_chunk$set(echo=TRUE,
+               cache=TRUE)
+set.seed(212121)
+```
+
+## Download and load data
+Download training and testing if it doesn't exist in current directory and load data.
+
+```{r download and load data}
+if(!file.exists("pml-training.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                    destfile="./pml-training.csv", method="curl")
+}
+if(!file.exists("pml-testing.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                    destfile="./pml-testing.csv", method="curl")
+}
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+## Data cleaning
+Dimension of training data before cleaning is as follow:
+
+```{r beforeCleaning}
+dim(training)
+```
+
+Irrelevant variables to data analysis (namely: X(id num), user_name and names with timestamp or windows) and variables with more than 60% of NA or empty values are removed from the dataset during the cleaning process.
+
+```{r cleanTraining}
+# method to remove header and trailing space of strings
+rm_htspc <- function(df) {
+  if(!is.data.frame(df)) stop("rm_htspc function only accepts data.frame arg.")
+  #remove header and trailing spaces for char and factor columns in data.frames
+  for(col in names(df)) {
+    colWasFactor <- class(df[, col]) == "factor"
+    if (class(df[, col]) == "character" | colWasFactor) {
+      df[, col] <- sub("^\\s+", "", df[, col])
+      df[, col] <- sub("\\s+$", "", df[, col])
+      if(colWasFactor) df[, col] <- as.factor(df[, col])
+    }
+  }
+  
+  df
+}
+
+training <- rm_htspc(training)
+# Empty string values are replaced by NA
+training[training == ""] <- NA
+# remove columns that have 60% or more values == NA
+training <- training[,colSums(is.na(training))<nrow(training)*0.6]
+#remove columns irrelevant to our analysis: X(id num), user_name and names with timestamp or windows.
+training <- training[, -c(1, 2)]
+training <- training[, !grepl("timestamp|window", names(training))]
+```
+
+Near zero covariates are removed from the training data using `nearZeroVar` function.
+
+```{r rm_nzv}
+# removing zero covariates
+nzv <- nearZeroVar(training, saveMetrics=T)
+training <- training[, !nzv$nzv]
+```
+
+Clean testing dataset so that only variables such as in the training dataset is retained.
+
+```{r cleanTesting}
+# retain columns in testing dataset based on cleaned training dataset
+testing <- testing[, names(testing) %in% names(training)[!grepl("classe", names(training))]]
+```
+
+The raw training data is then split to 60% train data(`train_s`) and 40% test data(`test_s`).
+
+```{r dataSplit}
+#split training to training_s and testing_s
+train_idx <- createDataPartition(y = training$classe, p = 0.6, list = FALSE)
+train_s <- training[train_idx,]
+test_s <- training[-train_idx,]
+```
+
+
+## Exploratory Analysis
+The dimension of the `train_s` data after cleaning is as follow:
+
+```{r explore_dim}
+dim(train_s)
+```
+
+More exploratory analysis is done by looking at the summary and correlation plot of the `train_s`:
+
+```{r explore_smry}
+summary(train_s)
+
+corrplot(cor(train_s[, !grepl("classe", names(train_s))]), method="color")
+```
+
+## Data Modeling
+
+### Prediction with Decision Tree
+Next, we attempt prediction with decision tree by doing model fit using `rpart`, then view the prediction results on the test data `test_s`.
+
+```{r dataModeling_rpart}
+modFit_rpart <- rpart(classe ~ ., data=train_s, method="class")
+pred_rpart <- predict(modFit_rpart, test_s, type="class")
+rpart_rs <- confusionMatrix(test_s$classe, pred_rpart)
+rpart_rs
+```
+
+```{r rpartOverall}
+rpart_rs$overall
+```
+
+The estimated accuracy from `rpart` model fit is `r round(as.numeric(rpart_rs$overall[1])*100, 2)`% and the expected out-of-sample error is `r round((1 - as.numeric(rpart_rs$overall[1]))*100, 2)`%.
+
+### Prediction with Random Forest
+
+Next, we attempt prediction with Random Forest by doing model fit using caret train `rf` method setting k-fold cross validation to 5 and `ntree` equal to 300, then view the prediction results on the test data `test_s`.
+
+```{r dataModeling_rf}
+modFit_rf <- train(classe ~ ., data=train_s, method="rf", trControl=trainControl(method="cv", 5), allowParallel=T, ntree=300)
+pred_rf <- predict(modFit_rf, test_s)
+rf_rs <- confusionMatrix(test_s$classe, pred_rf)
+rf_rs
+```
+
+```{r rfOverall}
+rf_rs$overall
+```
+
+The estimated accuracy from the `rf` model fit is `r round(as.numeric(rf_rs$overall[1])*100, 2)`% and the expected out-of-sample error is `r round((1 - as.numeric(rf_rs$overall[1]))*100, 2)`%.
+
+## Results
+Finally, as the Random Forest model fit gives a better accuracy than the `rpart` model fit, it is used to predict the class action from the testing dataset variables loaded in the beginning of this report: 
+
+```{r results}
+predict_testing_rf <- predict(modFit_rf, testing)
+predict_testing_rf
+```
+
+```{r write_testing_results, echo=FALSE, results='hide'}
+if(!dir.exists("testing_results")) dir.create("testing_results")
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("testing_results/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(as.character(predict_testing_rf))
+```
+
+## Appendix
+
+### Decision Tree rpart plot
+
+```{r rpart_tree_plot}
+fancyRpartPlot(modFit_rpart)
+```
