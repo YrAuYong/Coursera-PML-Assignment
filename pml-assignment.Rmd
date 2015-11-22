@@ -6,10 +6,11 @@ output: html_document
 ---
 
 ## Background
-Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har. 
 
 ## Objective
-In this project, the goal it to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har. 
+
+The goal of this assignment is to predict the manner in which the participants of the project did the exercise. This is the "classe" variable in the training set. This report will describe how the model is built, cross validation used, what the expected out of sample error is, and the choices made in the analysis. The chosen model will also be used to predict 20 different test cases. 
 
 ## Data
 The training data for this project are available here: 
@@ -115,7 +116,7 @@ Clean testing dataset so that only variables such as in the training dataset is 
 testing <- testing[, names(testing) %in% names(training)[!grepl("classe", names(training))]]
 ```
 
-The raw training data is then split to 60% train data(`train_s`) and 40% test data(`test_s`).
+The clean training data is then split to 60% train data(`train_s`) and 40% test data(`test_s`).
 
 ```{r dataSplit}
 #split training to training_s and testing_s
